@@ -1,0 +1,2 @@
+rootProject.name = "MultiSensePruebas"
+include ':app'

@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">MultiSensePruebas</string>
+    <string name="ble_not_supported">BLE is not supported</string>
+    <string name="scan_stopped">Scan Stopped</string>
+    <string name="scan_started">Scan Started</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="connected">Connected</string>
+    <string name="disconnected">Disconnected</string>
+</resources>
