@@ -23,6 +23,7 @@ import com.cellocator.nano.android.sdk.MultiSenseReadingLoggerStatus;
 import com.cellocator.nano.android.sdk.MultiSenseScanner;
 import com.cellocator.nano.android.sdk.model.MultiSenseDevice;
 import com.cellocator.nano.android.sdk.model.MultiSenseSensors;
+import com.example.multisensepruebas.service.CustomMqttService;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -41,6 +42,8 @@ public class MainActivity extends AppCompatActivity {
         scanStatus = (TextView) findViewById(R.id.textStatus);
         startStopBtn = (Button) findViewById(R.id.buttonStartStop);
 
+        CustomMqttService customMqttService = new CustomMqttService(this);
+
         MultiSenseManager multiSenseManager = new MultiSenseManager(this);
         MultiSenseScanner multiSenseScanner = multiSenseManager.createScanner();
         MultiSenseObserver multiSenseObserver = multiSenseManager.createObserver();
@@ -50,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
                 scanning = true;
                 startStopBtn.setText(R.string.stop);
                 scanStatus.setText(R.string.scan_started);
+                customMqttService.connect();
                 multiSenseScanner.scan(
                         new MultiSenseDeviceCallback() {
                             @Override
@@ -106,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
                 scanStatus.setText(R.string.scan_stopped);
                 multiSenseScanner.stopScan();
                 multiSenseObserver.stopObserveTags();
+                customMqttService.disconnect();
             }
         });
 
