@@ -7,7 +7,10 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import android.Manifest;
+import android.bluetooth.BluetoothAdapter;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -23,15 +26,38 @@ import com.cellocator.nano.android.sdk.MultiSenseReadingLoggerStatus;
 import com.cellocator.nano.android.sdk.MultiSenseScanner;
 import com.cellocator.nano.android.sdk.model.MultiSenseDevice;
 import com.cellocator.nano.android.sdk.model.MultiSenseSensors;
+import com.example.multisensepruebas.model.Location;
+import com.example.multisensepruebas.model.Measurement;
+import com.example.multisensepruebas.model.MultiSenseBeacon;
 import com.example.multisensepruebas.service.CustomMqttService;
+import com.example.multisensepruebas.util.MacAddressUtils;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.gson.Gson;
+
+import java.net.NetworkInterface;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
+    private List<MultiSenseBeacon> beacons;
+    private List<String> macAddresses;
     private TextView scanStatus;
     private Button startStopBtn;
+    private FusedLocationProviderClient fusedLocationClient;
+    private Location mLocation;
+    private CustomMqttService customMqttService;
+    private Long deviceId;
 
     private boolean scanning = false;
 
+    @RequiresApi(api = Build.VERSION_CODES.P)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -39,10 +65,15 @@ public class MainActivity extends AppCompatActivity {
 
         checkLocationPermissions();
 
-        scanStatus = (TextView) findViewById(R.id.textStatus);
-        startStopBtn = (Button) findViewById(R.id.buttonStartStop);
+        scanStatus = findViewById(R.id.textStatus);
+        startStopBtn = findViewById(R.id.buttonStartStop);
 
-        CustomMqttService customMqttService = new CustomMqttService(this);
+        mLocation = new Location();
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        customMqttService = new CustomMqttService(this);
+
+        //Get device MacAddress and convert it from hex to decimal
+        deviceId = MacAddressUtils.toLong(getMacAddress());
 
         MultiSenseManager multiSenseManager = new MultiSenseManager(this);
         MultiSenseScanner multiSenseScanner = multiSenseManager.createScanner();
@@ -54,6 +85,9 @@ public class MainActivity extends AppCompatActivity {
                 startStopBtn.setText(R.string.stop);
                 scanStatus.setText(R.string.scan_started);
                 customMqttService.connect();
+                getCurrentLocation();
+                macAddresses = new ArrayList<>();
+                beacons = new ArrayList<>();
                 multiSenseScanner.scan(
                         new MultiSenseDeviceCallback() {
                             @Override
@@ -67,6 +101,7 @@ public class MainActivity extends AppCompatActivity {
                                 multiSenseObserver.addTag(multiSenseDevice.getAddress());
                             }
                         });
+
                 multiSenseObserver.startObserveTags(new MultiSenseObserverCallback() {
                     @Override
                     public void onReadingLoggerStatusChange(String s, MultiSenseReadingLoggerStatus multiSenseReadingLoggerStatus) {
@@ -80,27 +115,50 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onChange(MultiSenseDevice multiSenseDevice) {
-                        // Reading device general info
-                        String mac = multiSenseDevice.getAddress();
-                        String name = multiSenseDevice.getName();
-                        /*int rssi = multiSenseDevice.getRssi();
-                        String firmwareRevision =
-                                multiSenseDevice.getAdvertisement().getFirmwareVersionName();
-                        String hardwareRevision =
-                                multiSenseDevice.getAdvertisement().getOtaVersionName();*/
+                        //Checking if beacon has read before
+                        if (!macAddresses.contains(multiSenseDevice.getAddress())) {
+                            macAddresses.add(multiSenseDevice.getAddress());
 
-                        System.out.println("MAC: " + mac + " NAME: " + name);
-                        // Reading sensors data
-                        for (MultiSenseSensors sensorSample : multiSenseDevice.getSensors()) {
-                            if (sensorSample.getTemperature() != null) {
-                                System.out.println("TEMP: " + sensorSample.getTemperature());
+                            MultiSenseBeacon beacon = new MultiSenseBeacon();
+                            Map<String, Object> telemetry = new HashMap<>();
+
+                            //Convert mac address hex to decimal
+                            beacon.setBeaconId(MacAddressUtils.toLong(multiSenseDevice.getAddress()));
+
+                            // Reading sensors data
+                            for (MultiSenseSensors sensorSample : multiSenseDevice.getSensors()) {
+
+                                System.out.println(sensorSample);
+
+                                if (sensorSample.getTemperature() != null)
+                                    telemetry.put("temperature", sensorSample.getTemperature());
+
+                                if (sensorSample.getBatteryLevel() != null)
+                                    telemetry.put("battery", sensorSample.getBatteryLevel());
+
+                                if (sensorSample.getLight() != null)
+                                    telemetry.put("light", sensorSample.getLight());
+
+                                if (sensorSample.getHumidity() != null)
+                                    telemetry.put("humidity", sensorSample.getHumidity());
+
+                                if (sensorSample.isOpenPackage() != null)
+                                    telemetry.put("openPackage", sensorSample.isOpenPackage());
+
+                                if (sensorSample.getAccelerometerX() != null)
+                                    telemetry.put("accX", sensorSample.getAccelerometerX());
+
+                                if (sensorSample.getAccelerometerY() != null)
+                                    telemetry.put("accY", sensorSample.getAccelerometerY());
+
+                                if (sensorSample.getAccelerometerZ() != null)
+                                    telemetry.put("accZ", sensorSample.getAccelerometerZ());
+
+                                beacon.setTelemetry(telemetry);
+                                System.out.println(beacon);
+                                beacons.add(beacon);
                             }
-                            if (sensorSample.getBatteryLevel() != null) {
-                                System.out.println("BATTERY: " + sensorSample.getBatteryLevel());
-                            }
-                            if (sensorSample.getLight() != null) {
-                                System.out.println("LIGHT: " + sensorSample.getLight());
-                            }
+
                         }
                     }
                 });
@@ -110,26 +168,10 @@ public class MainActivity extends AppCompatActivity {
                 scanStatus.setText(R.string.scan_stopped);
                 multiSenseScanner.stopScan();
                 multiSenseObserver.stopObserveTags();
+                publishMeasurement();
                 customMqttService.disconnect();
             }
         });
-
-    }
-
-    public void checkLocationPermissions() {
-        //if we have permission to access to gps location
-        if (ContextCompat.checkSelfPermission(this,
-                android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this,
-                        android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            //start location service
-            //startLocationService();
-        } else {
-            //If do not have location access then request permissions
-            ActivityCompat.requestPermissions(this, new String[]{
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
-        }
 
     }
 
@@ -167,4 +209,98 @@ public class MainActivity extends AppCompatActivity {
 
         }
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Ensures Bluetooth is enabled on the device.  If Bluetooth is not currently enabled,
+        // fire an intent to display a dialog asking the user to grant permission to enable it.
+        if (!BluetoothAdapter.getDefaultAdapter().isEnabled()) {
+            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableBtIntent, 1);
+        }
+
+    }
+
+    public void checkLocationPermissions() {
+        //if we have permission to access to gps location
+        if (ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(this,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            //start location service
+            //startLocationService();
+        } else {
+            //If do not have location access then request permissions
+            ActivityCompat.requestPermissions(this, new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
+        }
+
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.P)
+    public void getCurrentLocation() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        fusedLocationClient.getLastLocation().addOnSuccessListener(this.getMainExecutor(), new OnSuccessListener<android.location.Location>() {
+            @Override
+            public void onSuccess(android.location.Location location) {
+                if (location != null) {
+                    mLocation.setLatitude(location.getLatitude());
+                    mLocation.setLongitude(location.getLongitude());
+                }
+
+            }
+        });
+    }
+
+    private String getMacAddress() {
+        try {
+            List<NetworkInterface> all = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface nif : all) {
+                if (!nif.getName().equalsIgnoreCase("wlan0")) continue;
+
+                byte[] macBytes = nif.getHardwareAddress();
+                if (macBytes == null) {
+                    return "";
+                }
+
+                StringBuilder res1 = new StringBuilder();
+                for (byte b : macBytes) {
+                    res1.append(Integer.toHexString(b & 0xFF)).append(".");
+                }
+
+                if (res1.length() > 0) {
+                    res1.deleteCharAt(res1.length() - 1);
+                }
+                return res1.toString();
+            }
+        } catch (Exception ex) {
+            //handle exception
+        }
+        return "";
+    }
+
+    public void publishMeasurement() {
+        Measurement measurement = new Measurement();
+        measurement.setDeviceId(deviceId);
+        measurement.setLocation(mLocation);
+        measurement.setBeacons(beacons);
+
+        Gson gson = new Gson();
+        String json = gson.toJson(measurement);
+
+        customMqttService.pub(json);
+    }
+
 }
