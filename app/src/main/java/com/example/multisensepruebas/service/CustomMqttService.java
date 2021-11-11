@@ -12,7 +12,6 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 
 public class CustomMqttService {
 
-    private static final String HOST = "192.168.100.6";
     private static final String PORT = "1883";
     private static final String TOPIC = "android/measurement";
 
@@ -24,9 +23,9 @@ public class CustomMqttService {
         this.mContext = context;
     }
 
-    public void connect() {
+    public void connect(String ip) {
 
-        String connectionUri = "tcp://" + HOST + ":" + PORT;
+        String connectionUri = "tcp://" + ip + ":" + PORT;
         String clientId = MqttClient.generateClientId();
 
         client = new MqttAndroidClient(mContext, connectionUri, clientId);

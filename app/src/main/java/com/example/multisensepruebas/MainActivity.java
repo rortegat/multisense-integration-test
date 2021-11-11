@@ -13,8 +13,10 @@ import android.content.pm.PackageManager;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,26 +40,33 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.gson.Gson;
 
 import java.net.NetworkInterface;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@RequiresApi(api = Build.VERSION_CODES.Q)
 public class MainActivity extends AppCompatActivity {
+
+    private final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     private List<MultiSenseBeacon> beacons;
     private List<String> macAddresses;
-    private TextView scanStatus;
-    private Button startStopBtn;
     private FusedLocationProviderClient fusedLocationClient;
     private Location mLocation;
     private CustomMqttService customMqttService;
     private Long deviceId;
 
+
+    private Button startStopBtn;
+    private EditText hostInput;
+    private TextView scanStatus;
+
     private boolean scanning = false;
 
-    @RequiresApi(api = Build.VERSION_CODES.P)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -66,7 +75,9 @@ public class MainActivity extends AppCompatActivity {
         checkLocationPermissions();
 
         scanStatus = findViewById(R.id.textStatus);
+        scanStatus.setMovementMethod(new ScrollingMovementMethod());
         startStopBtn = findViewById(R.id.buttonStartStop);
+        hostInput = findViewById(R.id.inputHost);
 
         mLocation = new Location();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -84,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
                 scanning = true;
                 startStopBtn.setText(R.string.stop);
                 scanStatus.setText(R.string.scan_started);
-                customMqttService.connect();
+                customMqttService.connect(hostInput.getText().toString());
                 getCurrentLocation();
                 macAddresses = new ArrayList<>();
                 beacons = new ArrayList<>();
@@ -105,16 +116,18 @@ public class MainActivity extends AppCompatActivity {
                 multiSenseObserver.startObserveTags(new MultiSenseObserverCallback() {
                     @Override
                     public void onReadingLoggerStatusChange(String s, MultiSenseReadingLoggerStatus multiSenseReadingLoggerStatus) {
-
+                        Log.i("OBSERVER STATUS", String.valueOf(multiSenseReadingLoggerStatus.getPercent()));
                     }
 
                     @Override
                     public void onError(int i, String s) {
-                        Log.e("OBSERVER", s);
+                        Log.e("OBSERVER ERROR", s);
                     }
 
                     @Override
                     public void onChange(MultiSenseDevice multiSenseDevice) {
+
+                        System.out.println(multiSenseDevice.toString());
                         //Checking if beacon has read before
                         if (!macAddresses.contains(multiSenseDevice.getAddress())) {
                             macAddresses.add(multiSenseDevice.getAddress());
@@ -154,18 +167,20 @@ public class MainActivity extends AppCompatActivity {
                                 if (sensorSample.getAccelerometerZ() != null)
                                     telemetry.put("accZ", sensorSample.getAccelerometerZ());
 
-                                beacon.setTelemetry(telemetry);
-                                System.out.println(beacon);
-                                beacons.add(beacon);
+                                if (sensorSample.getCreateDate() != null)
+                                    telemetry.put("datetime", sensorSample.getCreateDate());
                             }
 
+                            beacon.setTelemetry(telemetry);
+                            scanStatus.append("\n" + beacon.toString());
+                            beacons.add(beacon);
                         }
                     }
                 });
             } else {
                 scanning = false;
                 startStopBtn.setText(R.string.start);
-                scanStatus.setText(R.string.scan_stopped);
+                scanStatus.append("\nScanning stopped");
                 multiSenseScanner.stopScan();
                 multiSenseObserver.stopObserveTags();
                 publishMeasurement();
@@ -175,7 +190,6 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         Log.i("CODE", String.valueOf(requestCode));
@@ -240,7 +254,6 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.P)
     public void getCurrentLocation() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // TODO: Consider calling
@@ -296,9 +309,12 @@ public class MainActivity extends AppCompatActivity {
         measurement.setDeviceId(deviceId);
         measurement.setLocation(mLocation);
         measurement.setBeacons(beacons);
+        measurement.setDatetime(DTF.format(ZonedDateTime.now()));
 
         Gson gson = new Gson();
         String json = gson.toJson(measurement);
+
+        System.out.println(json);
 
         customMqttService.pub(json);
     }
