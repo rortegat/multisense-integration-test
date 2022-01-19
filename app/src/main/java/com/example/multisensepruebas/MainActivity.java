@@ -1,16 +1,9 @@
 package com.example.multisensepruebas;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.method.ScrollingMovementMethod;
@@ -20,6 +13,12 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import com.cellocator.nano.android.sdk.MultiSenseDeviceCallback;
 import com.cellocator.nano.android.sdk.MultiSenseManager;
 import com.cellocator.nano.android.sdk.MultiSenseObserver;
@@ -28,25 +27,23 @@ import com.cellocator.nano.android.sdk.MultiSenseReadingLoggerStatus;
 import com.cellocator.nano.android.sdk.MultiSenseScanner;
 import com.cellocator.nano.android.sdk.model.MultiSenseDevice;
 import com.cellocator.nano.android.sdk.model.MultiSenseSensors;
+import com.example.multisensepruebas.model.DeviceMeasurement;
 import com.example.multisensepruebas.model.Location;
-import com.example.multisensepruebas.model.Measurement;
 import com.example.multisensepruebas.model.MultiSenseBeacon;
 import com.example.multisensepruebas.service.CustomMqttService;
 import com.example.multisensepruebas.util.MacAddressUtils;
-
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.gson.Gson;
 
 import java.net.NetworkInterface;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RequiresApi(api = Build.VERSION_CODES.Q)
 public class MainActivity extends AppCompatActivity {
@@ -54,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
     private final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     private List<MultiSenseBeacon> beacons;
-    private List<String> macAddresses;
     private FusedLocationProviderClient fusedLocationClient;
     private Location mLocation;
     private CustomMqttService customMqttService;
@@ -84,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
         customMqttService = new CustomMqttService(this);
 
         //Get device MacAddress and convert it from hex to decimal
+        System.out.println("DEVICE MAC: " + getMacAddress());
         deviceId = MacAddressUtils.toLong(getMacAddress());
 
         MultiSenseManager multiSenseManager = new MultiSenseManager(this);
@@ -97,7 +94,6 @@ public class MainActivity extends AppCompatActivity {
                 scanStatus.setText(R.string.scan_started);
                 customMqttService.connect(hostInput.getText().toString());
                 getCurrentLocation();
-                macAddresses = new ArrayList<>();
                 beacons = new ArrayList<>();
                 multiSenseScanner.scan(
                         new MultiSenseDeviceCallback() {
@@ -114,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
                         });
 
                 multiSenseObserver.startObserveTags(new MultiSenseObserverCallback() {
+
                     @Override
                     public void onReadingLoggerStatusChange(String s, MultiSenseReadingLoggerStatus multiSenseReadingLoggerStatus) {
                         Log.i("OBSERVER STATUS", String.valueOf(multiSenseReadingLoggerStatus.getPercent()));
@@ -128,52 +125,49 @@ public class MainActivity extends AppCompatActivity {
                     public void onChange(MultiSenseDevice multiSenseDevice) {
 
                         System.out.println(multiSenseDevice.toString());
-                        //Checking if beacon has read before
-                        if (!macAddresses.contains(multiSenseDevice.getAddress())) {
-                            macAddresses.add(multiSenseDevice.getAddress());
 
-                            MultiSenseBeacon beacon = new MultiSenseBeacon();
-                            Map<String, Object> telemetry = new HashMap<>();
+                        //Convert mac address hex to decimal
+                        Long beaconId = MacAddressUtils.toLong(multiSenseDevice.getAddress());
 
-                            //Convert mac address hex to decimal
-                            beacon.setBeaconId(MacAddressUtils.toLong(multiSenseDevice.getAddress()));
+                        // Reading sensors data
+                        for (MultiSenseSensors sensorSample : multiSenseDevice.getSensors()) {
 
-                            // Reading sensors data
-                            for (MultiSenseSensors sensorSample : multiSenseDevice.getSensors()) {
+                            //If measurement doesn't have temperature, we don't need it
+                            if (sensorSample.getTemperature() != null) {
 
-                                System.out.println(sensorSample);
-
-                                if (sensorSample.getTemperature() != null)
-                                    telemetry.put("temperature", sensorSample.getTemperature());
+                                MultiSenseBeacon beacon = new MultiSenseBeacon();
+                                beacon.setBeaconId(beaconId);
+                                beacon.setTemperature(sensorSample.getTemperature());
 
                                 if (sensorSample.getBatteryLevel() != null)
-                                    telemetry.put("battery", sensorSample.getBatteryLevel());
+                                    beacon.setBattery(sensorSample.getBatteryLevel() / 3000f * 100);
 
                                 if (sensorSample.getLight() != null)
-                                    telemetry.put("light", sensorSample.getLight());
+                                    beacon.setLight(sensorSample.getLight());
 
                                 if (sensorSample.getHumidity() != null)
-                                    telemetry.put("humidity", sensorSample.getHumidity());
+                                    beacon.setHumidity(sensorSample.getHumidity());
 
                                 if (sensorSample.isOpenPackage() != null)
-                                    telemetry.put("openPackage", sensorSample.isOpenPackage());
+                                    beacon.setOpenPackage(sensorSample.isOpenPackage());
 
                                 if (sensorSample.getAccelerometerX() != null)
-                                    telemetry.put("accX", sensorSample.getAccelerometerX());
+                                    beacon.setAccX(sensorSample.getAccelerometerX());
 
                                 if (sensorSample.getAccelerometerY() != null)
-                                    telemetry.put("accY", sensorSample.getAccelerometerY());
+                                    beacon.setAccY(sensorSample.getAccelerometerY());
 
                                 if (sensorSample.getAccelerometerZ() != null)
-                                    telemetry.put("accZ", sensorSample.getAccelerometerZ());
+                                    beacon.setAccZ(sensorSample.getAccelerometerZ());
 
-                                if (sensorSample.getCreateDate() != null)
-                                    telemetry.put("datetime", sensorSample.getCreateDate());
+                                if (sensorSample.getCreateDate() != null) {
+                                    ZonedDateTime zonedDateTime = ZonedDateTime.ofInstant(sensorSample.getCreateDate().toInstant(), ZoneId.systemDefault());
+                                    beacon.setDatetime(DTF.format(zonedDateTime));
+                                }
+
+                                scanStatus.append("\n" + beacon.toString());
+                                beacons.add(beacon);
                             }
-
-                            beacon.setTelemetry(telemetry);
-                            scanStatus.append("\n" + beacon.toString());
-                            beacons.add(beacon);
                         }
                     }
                 });
@@ -305,14 +299,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void publishMeasurement() {
-        Measurement measurement = new Measurement();
-        measurement.setDeviceId(deviceId);
-        measurement.setLocation(mLocation);
-        measurement.setBeacons(beacons);
-        measurement.setDatetime(DTF.format(ZonedDateTime.now()));
+        DeviceMeasurement deviceMeasurement = new DeviceMeasurement();
+        deviceMeasurement.setDeviceId(deviceId);
+        deviceMeasurement.setLatitude(mLocation.getLatitude());
+        deviceMeasurement.setLongitude(mLocation.getLongitude());
+        deviceMeasurement.setBattery(100f);
+        deviceMeasurement.setBeacons(beacons);
+        deviceMeasurement.setDatetime(DTF.format(ZonedDateTime.now()));
 
         Gson gson = new Gson();
-        String json = gson.toJson(measurement);
+        String json = gson.toJson(deviceMeasurement);
 
         System.out.println(json);
 
