@@ -25,7 +25,9 @@ import com.cellocator.nano.android.sdk.MultiSenseObserver;
 import com.cellocator.nano.android.sdk.MultiSenseObserverCallback;
 import com.cellocator.nano.android.sdk.MultiSenseReadingLoggerStatus;
 import com.cellocator.nano.android.sdk.MultiSenseScanner;
+import com.cellocator.nano.android.sdk.model.MultiSenseConfiguration;
 import com.cellocator.nano.android.sdk.model.MultiSenseDevice;
+import com.cellocator.nano.android.sdk.model.MultiSenseEnabledSensors;
 import com.cellocator.nano.android.sdk.model.MultiSenseSensors;
 import com.example.multisensepruebas.model.DeviceMeasurement;
 import com.example.multisensepruebas.model.Location;
@@ -50,12 +52,15 @@ public class MainActivity extends AppCompatActivity {
 
     private final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
+    private MultiSenseManager multiSenseManager;
+    private MultiSenseScanner multiSenseScanner;
+    private MultiSenseObserver multiSenseObserver;
+
     private List<MultiSenseBeacon> beacons;
     private FusedLocationProviderClient fusedLocationClient;
     private Location mLocation;
     private CustomMqttService customMqttService;
     private Long deviceId;
-
 
     private Button startStopBtn;
     private EditText hostInput;
@@ -83,9 +88,11 @@ public class MainActivity extends AppCompatActivity {
         System.out.println("DEVICE MAC: " + getMacAddress());
         deviceId = MacAddressUtils.toLong(getMacAddress());
 
-        MultiSenseManager multiSenseManager = new MultiSenseManager(this);
-        MultiSenseScanner multiSenseScanner = multiSenseManager.createScanner();
-        MultiSenseObserver multiSenseObserver = multiSenseManager.createObserver();
+        multiSenseManager = new MultiSenseManager(this);
+        multiSenseScanner = multiSenseManager.createScanner();
+        multiSenseObserver = multiSenseManager.createObserver();
+
+        //sendDeviceConfiguration("48.1A.84.00.8A.6E");
 
         startStopBtn.setOnClickListener(v -> {
             if (!scanning) {
@@ -104,6 +111,7 @@ public class MainActivity extends AppCompatActivity {
 
                             @Override
                             public void onChange(MultiSenseDevice multiSenseDevice) {
+                                System.out.println("ADDING TAG: " + multiSenseDevice.getAddress());
                                 // Adding found device by mac address to observer
                                 multiSenseObserver.addTag(multiSenseDevice.getAddress());
                             }
@@ -123,8 +131,7 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onChange(MultiSenseDevice multiSenseDevice) {
-
-                        System.out.println(multiSenseDevice.toString());
+                        System.out.println("ALL DEVICE: " + multiSenseDevice.toString());
 
                         //Convert mac address hex to decimal
                         Long beaconId = MacAddressUtils.toLong(multiSenseDevice.getAddress());
@@ -313,6 +320,32 @@ public class MainActivity extends AppCompatActivity {
         System.out.println(json);
 
         customMqttService.pub(json);
+    }
+
+    public void sendDeviceConfiguration(String macAddress) {
+        MultiSenseEnabledSensors enabledSensors = new MultiSenseEnabledSensors.Builder()
+                .setTemperature(true)
+                .setHumidity(true)
+                .setLight(true)
+                .setHallEffect(true)
+                .setHumidity(true)
+                .setAccelerometer(true)
+                .setLoggerEnabled(true)
+                .setPowerDown(false)
+                .setTxReason(false)
+                .create();
+
+        MultiSenseConfiguration deviceConfiguration = new MultiSenseConfiguration.Builder()
+                .setSensorMask(enabledSensors)
+                .setProximityTimer(3600)
+                .setRelaxedTimer(300)
+                .setViolationTimer(60)
+                .setAlertTimer(2)
+                .setTempUpper(50)
+                .create();
+
+        System.out.println("CONFIGURATION PREPARED: " + deviceConfiguration);
+        multiSenseObserver.saveConfiguration(macAddress, deviceConfiguration);
     }
 
 }
