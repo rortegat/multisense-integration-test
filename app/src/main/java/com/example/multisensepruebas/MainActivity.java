@@ -45,7 +45,9 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RequiresApi(api = Build.VERSION_CODES.Q)
 public class MainActivity extends AppCompatActivity {
@@ -57,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
     private MultiSenseObserver multiSenseObserver;
 
     private List<MultiSenseBeacon> beacons;
+    private Map<String, Float> devices;
     private FusedLocationProviderClient fusedLocationClient;
     private Location mLocation;
     private CustomMqttService customMqttService;
@@ -65,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private Button startStopBtn;
     private EditText hostInput;
     private TextView scanStatus;
+    private TextView deviceStatus;
 
     private boolean scanning = false;
 
@@ -77,6 +81,8 @@ public class MainActivity extends AppCompatActivity {
 
         scanStatus = findViewById(R.id.textStatus);
         scanStatus.setMovementMethod(new ScrollingMovementMethod());
+        deviceStatus = findViewById(R.id.textDevices);
+        deviceStatus.setMovementMethod(new ScrollingMovementMethod());
         startStopBtn = findViewById(R.id.buttonStartStop);
         hostInput = findViewById(R.id.inputHost);
 
@@ -92,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
         multiSenseScanner = multiSenseManager.createScanner();
         multiSenseObserver = multiSenseManager.createObserver();
 
-        //sendDeviceConfiguration("48.1A.84.00.8A.6E");
+        //sendDeviceConfiguration("48.1A.84.00.64.7A");
 
         startStopBtn.setOnClickListener(v -> {
             if (!scanning) {
@@ -101,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
                 scanStatus.setText(R.string.scan_started);
                 customMqttService.connect(hostInput.getText().toString());
                 getCurrentLocation();
+                devices = new HashMap<>();
                 beacons = new ArrayList<>();
                 multiSenseScanner.scan(
                         new MultiSenseDeviceCallback() {
@@ -121,7 +128,12 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onReadingLoggerStatusChange(String s, MultiSenseReadingLoggerStatus multiSenseReadingLoggerStatus) {
-                        Log.i("OBSERVER STATUS", String.valueOf(multiSenseReadingLoggerStatus.getPercent()));
+                        Log.i("READER STATUS: ", multiSenseReadingLoggerStatus.getStatus() + " (" + s + "): " + multiSenseReadingLoggerStatus.getPercent());
+                        if (multiSenseReadingLoggerStatus.getStatus().equals(MultiSenseReadingLoggerStatus.Status.SUCCESS)) {
+                            Log.i("STATUS:", "COMPLETED");
+                        }
+                        devices.put(s, multiSenseReadingLoggerStatus.getPercent());
+                        deviceStatus.setText(devices.toString());
                     }
 
                     @Override
