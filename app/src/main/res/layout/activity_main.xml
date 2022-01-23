@@ -17,9 +17,10 @@
         android:text="@string/start"
         app:layout_constraintBottom_toTopOf="@+id/textStatus"
         app:layout_constraintEnd_toStartOf="@+id/inputHost"
-        app:layout_constraintHorizontal_bias="0.97"
+        app:layout_constraintHorizontal_bias="0.714"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0" />
 
     <EditText
         android:id="@+id/inputHost"
@@ -27,25 +28,42 @@
         android:layout_height="42dp"
         android:layout_marginTop="100dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="39dp"
+        android:layout_marginBottom="50dp"
         android:inputType="text"
-        app:layout_constraintBottom_toTopOf="@+id/textStatus"
+        app:layout_constraintBottom_toTopOf="@+id/textDevices"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.913"
+        app:layout_constraintHorizontal_bias="0.898"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0" />
 
     <TextView
-        android:id="@+id/textStatus"
-        android:layout_width="344dp"
-        android:layout_height="429dp"
+        android:id="@+id/textDevices"
+        android:layout_width="170dp"
+        android:layout_height="143dp"
         android:scrollbars="vertical"
         android:text="@string/scan_stopped"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.492"
+        app:layout_constraintHorizontal_bias="0.149"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.672" />
+        app:layout_constraintVertical_bias="0.324" />
+
+    <TextView
+        android:id="@+id/textStatus"
+        android:layout_width="327dp"
+        android:layout_height="294dp"
+        android:layout_marginTop="63dp"
+        android:layout_marginBottom="184dp"
+        android:scrollbars="vertical"
+        android:text="@string/scan_stopped"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.428"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/textDevices"
+        app:layout_constraintVertical_bias="0.277" />
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>
