@@ -190,12 +190,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 });
+
             } else {
                 scanning = false;
                 startStopBtn.setText(R.string.start);
                 scanStatus.append("\nScanning stopped");
-                multiSenseScanner.stopScan();
                 multiSenseObserver.stopObserveTags();
+                multiSenseObserver.removeAllTags();
+                multiSenseScanner.stopScan();
                 publishMeasurement();
                 customMqttService.disconnect();
             }
